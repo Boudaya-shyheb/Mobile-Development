@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../services/firebase_service.dart';
+import '../services/auth_service.dart';
 import '../theme.dart';
 import '../widgets/form_field.dart';
 import '../widgets/primary_button.dart';
@@ -20,7 +20,7 @@ class _SignUpPageState extends State<SignUpPage> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   final _confirmPassword = TextEditingController();
-  final _service = FirebaseService();
+  final _service = AuthService.instance;
   String? _role;
   bool _showRoleError = false;
   bool _loading = false;
@@ -77,6 +77,7 @@ class _SignUpPageState extends State<SignUpPage> {
         phone: _phone.text,
         email: _email.text,
         password: _password.text,
+        confirmPassword: _confirmPassword.text,
         role: _role!,
       );
       if (mounted) {

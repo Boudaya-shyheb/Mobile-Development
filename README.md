@@ -1,212 +1,169 @@
-# CarShare --- Installation, Firebase/Firestore et lancement
+# CarShare
 
-Ce guide explique comment récupérer le projet Flutter **CarShare**, le
-connecter au projet Firebase partagé par l'équipe et lancer
-l'application sur Android.
+CarShare est une application Flutter Android pour la gestion des comptes de covoiturage. Le client mobile communique avec une API **Spring Boot** ; les comptes et sessions sont stockés dans **PostgreSQL sur Neon**.
 
-## 1. Prérequis
+> Le module actuellement pris en charge est la gestion des utilisateurs : inscription, connexion, déconnexion, profil et demande de réinitialisation du mot de passe. Les trajets, réservations, paiements, messages et la géolocalisation ne sont pas encore implémentés.
 
-Installer et configurer :
+## Architecture
 
--   [Flutter SDK](https://docs.flutter.dev/get-started/install)
--   [Android Studio](https://developer.android.com/studio), avec Android
-    SDK 14 API 34 et un émulateur ou un téléphone Android
--   [Git](https://git-scm.com/downloads)
--   Un compte Google ayant accès au projet Firebase CarShare
+```text
+Application Flutter  →  API REST Spring Boot  →  PostgreSQL (Neon)
+      Android                  port 8080                 données
+```
 
-Vérifier l'environnement dans un terminal :
+- `lib/` : pages Flutter, validation des formulaires, client HTTP et stockage sécurisé du jeton de session.
+- `backend/` : API REST Spring Boot, sécurité des sessions, accès PostgreSQL et migrations Flyway.
+- `backend/src/main/resources/db/migration/` : migrations versionnées du schéma.
+- `run-android-phone.ps1` : démarrage Flutter sur un téléphone USB avec redirection vers l’API locale.
+- `backend/run-local.ps1` : démarrage local de l’API à partir de la configuration Neon.
 
-``` bash
+Firebase n’est plus utilisé par le code actuel. Les anciens comptes Firebase ne sont pas transférés automatiquement vers Neon : il faut créer un compte dans CarShare, sauf si l’équipe organise une migration des comptes.
+
+## Prérequis
+
+- Flutter SDK compatible avec la version déclarée dans `pubspec.yaml` (Dart `^3.13.3`).
+- Android Studio avec Android SDK et un émulateur, ou un téléphone Android avec débogage USB activé.
+- JDK 17 ou plus récent.
+- Accès au projet Neon partagé par l’équipe et Neon CLI pour la première configuration.
+- Git et une connexion réseau pour télécharger les dépendances la première fois.
+
+Vérifier les outils :
+
+```powershell
 flutter doctor
 flutter --version
+java -version
 ```
 
-Si des licences Android sont en attente, exécuter :
+## Première configuration du poste
 
-``` bash
-flutter doctor --android-licenses
-```
+### 1. Récupérer les dépendances Flutter
 
-Accepter les licences proposées. Pour développer uniquement sur Android,
-l'avertissement concernant Visual Studio pour les applications Windows
-n'est pas bloquant.
+Depuis la racine du dépôt :
 
-## 2. Installer les dépendances Flutter
-
-``` bash
+```powershell
 flutter pub get
 ```
 
-## 3. Configurer Firebase pour Flutter/Android
+### 2. Lier le dépôt au projet Neon de l’équipe
 
-### 3.1 Vérifier l'identifiant Android
+Si Neon CLI n’est pas installé :
 
-Dans `android/app/build.gradle.kts`, vérifier la valeur de
-`applicationId`. Pour la configuration actuelle du projet, elle est
-normalement :
-
-``` kotlin
-applicationId = "com.example.carshare"
+```powershell
+npm install -g neon@latest
 ```
 
-L'identifiant doit correspondre exactement à celui de l'application
-Android enregistrée dans Firebase. Si le projet utilise un autre
-identifiant, utilisez celui qui est réellement déclaré dans Gradle.
+Se connecter si nécessaire, puis lier ce dépôt au **projet Neon existant de l’équipe** :
 
-### 3.2 Vérifier les fichiers Firebase
-
-La configuration Flutter/Android utilise normalement :
-
-``` text
-lib/firebase_options.dart
-android/app/google-services.json
+```powershell
+neon auth
+neon link
 ```
 
--   `firebase_options.dart` contient les options générées pour les
-    plateformes Flutter configurées.
--   `google-services.json` contient la configuration de l'application
-    Android Firebase.
+Dans les choix interactifs, sélectionner l’organisation, le projet CarShare et la branche décidée par l’équipe. La liaison crée le fichier local `.neon` et récupère les variables de connexion dans `.env.local` à la racine. Ces fichiers sont ignorés par Git : ne les ajoutez jamais au dépôt et ne partagez pas leur contenu dans les tickets ou messages.
 
-Si ces fichiers sont déjà présents et correspondent au projet Firebase
-de l'équipe, ne les régénérez pas inutilement.
+Pour le travail qui modifie le schéma ou les données, utiliser une branche Neon de développement convenue avec l’équipe. La branche Neon doit correspondre à la tâche et aux migrations Flyway en cours ; évitez de tester des migrations sur une branche partagée ou de production.
 
-Si un fichier manque ou si la configuration pointe vers le mauvais
-projet :
+### 3. Démarrer le backend
 
-1.  Ouvrir un terminal à la racine du projet.
-2.  Installer Firebase CLI si nécessaire, puis se connecter :
+Dans un premier terminal PowerShell, depuis la racine :
 
-``` bash
-npm install -g firebase-tools
-firebase login
+```powershell
+.\backend\run-local.ps1
 ```
 
-3.  Installer FlutterFire CLI :
+L’API démarre sur `http://localhost:8080`. Le script lit `.env.local`, convertit les URL Neon en URL JDBC en mémoire, utilise la connexion poolée pour les requêtes et l’URL directe pour Flyway. Il ne doit pas afficher les identifiants de base de données.
 
-``` bash
-dart pub global activate flutterfire_cli
-```
+Au premier démarrage, Flyway crée les tables à partir des migrations du dossier backend. Hibernate vérifie le schéma sans le modifier. Pour changer la base, ajoutez une nouvelle migration Flyway versionnée ; ne modifiez pas manuellement la base pour contourner une migration.
 
-4.  Configurer l'application en sélectionnant le projet Firebase
-    **existant** de l'équipe :
+Si la commande échoue, vérifiez que `.env.local` contient les variables Neon attendues (`DATABASE_URL` et, si disponible, `DATABASE_URL_UNPOOLED`) et que le compte peut joindre Neon. Ne collez pas les valeurs de ces variables dans le dépôt.
 
-``` bash
-flutterfire configure
-```
+### 4. Lancer l’application Flutter
 
-Sélectionner Android et, si demandé, les autres plateformes réellement
-utilisées. Vérifier que l'identifiant Android correspond à celui de
-Gradle. Cette commande génère ou met à jour `lib/firebase_options.dart`.
-Télécharger également `google-services.json` depuis les paramètres du
-projet Firebase, dans l'application Android correspondante, puis le
-placer dans `android/app/google-services.json`.
+Laissez le backend actif.
 
-Ne créez pas un nouveau projet Firebase par membre. Ne remplacez pas les
-fichiers de configuration partagés sans coordination avec l'équipe.
+**Émulateur Android** : dans un second terminal à la racine :
 
-### 3.3 Initialisation et dépendances
-
-Le code doit initialiser Firebase avant `runApp()`, généralement dans
-`lib/main.dart` :
-
-``` dart
-await Firebase.initializeApp(
-  options: DefaultFirebaseOptions.currentPlatform,
-);
-```
-
-Les packages utilisés par le module utilisateur comprennent normalement
-:
-
--   `firebase_core`
--   `firebase_auth`
--   `cloud_firestore`
-
-Les dépendances sont déclarées dans `pubspec.yaml`. Pour les installer :
-
-``` bash
-flutter pub get
-```
-
-Ne copiez pas manuellement des versions fictives dans `pubspec.yaml`;
-laissez Flutter résoudre les versions compatibles.
-
-## 4. Lancer l'application
-
-### Sur un téléphone Android
-
-1.  Activer les options développeur et le débogage USB sur le téléphone.
-2.  Connecter le téléphone au PC et accepter l'autorisation de débogage.
-3.  À la racine du projet, exécuter :
-
-``` bash
-flutter devices
-```
-
-Le téléphone doit apparaître dans la liste.
-
-### Sur un émulateur Android
-
-Dans Android Studio, ouvrir **Tools → Device Manager**, démarrer un
-émulateur, puis vérifier sa présence avec `flutter devices`.
-
-### Démarrer CarShare
-
-À la racine du projet :
-
-``` bash
-flutter pub get
-flutter analyze
+```powershell
 flutter run
 ```
 
-Pour générer un APK de débogage :
+La configuration par défaut utilise `http://10.0.2.2:8080/api`, l’adresse de l’hôte depuis l’émulateur Android.
 
-``` bash
+**Téléphone Android connecté en USB** :
+
+```powershell
+.\run-android-phone.ps1
+```
+
+Le script vérifie la connexion ADB, redirige le port 8080 du téléphone vers l’ordinateur et démarre Flutter avec l’adresse locale adaptée. Gardez le backend actif dans son terminal. Autorisez le débogage USB sur le téléphone si Android affiche une demande.
+
+Pour une autre cible Android ou une API distante, fournissez une adresse accessible depuis l’appareil :
+
+```powershell
+flutter run --dart-define=CARSHARE_API_BASE_URL=https://ADRESSE_DE_VOTRE_API/api
+```
+
+Ne mettez pas une URL locale `localhost` dans l’application pour un téléphone physique : `localhost` désignerait le téléphone lui-même. Le manifeste Android n’autorise HTTP en clair que pour le débogage local ; utiliser HTTPS pour une API publiée.
+
+## Parcours utilisateur disponible
+
+1. **Welcome** : accéder à l’inscription ou à la connexion.
+2. **Sign Up** : créer un compte avec nom complet, téléphone, adresse e-mail, mot de passe et rôle (`passenger` ou `driver`).
+3. **Sign In** : se connecter à un compte enregistré dans Neon.
+4. **Home** : afficher le nom et le rôle de l’utilisateur connecté.
+5. **Sign Out** : révoquer la session côté API et revenir à la connexion.
+6. **Forgot password?** : demander un lien de réinitialisation ; nécessite la configuration d’un serveur SMTP dans le backend.
+
+Le backend chiffre les mots de passe avec BCrypt et ne stocke que les empreintes des jetons de session. L’application conserve le jeton dans le stockage sécurisé Android et l’envoie comme jeton Bearer aux routes protégées.
+
+## Configuration de la récupération du mot de passe
+
+La demande **Forgot password?** nécessite un fournisseur SMTP. Définir ces variables dans l’environnement du backend, ou dans la configuration locale appropriée :
+
+```text
+MAIL_HOST
+MAIL_PORT
+MAIL_USERNAME
+MAIL_PASSWORD
+MAIL_FROM
+PUBLIC_API_URL
+```
+
+`PUBLIC_API_URL` doit être joignable par la personne qui reçoit le lien. Sans SMTP configuré, inscription, connexion, profil et déconnexion restent disponibles ; la récupération du mot de passe ne peut pas envoyer de message.
+
+## Vérifications de développement
+
+Depuis la racine du dépôt :
+
+```powershell
+flutter analyze
 flutter build apk --debug
 ```
 
-Le fichier APK est normalement généré ici :
+Pour démarrer l’API seule depuis son dossier :
 
-``` text
-build/app/outputs/flutter-apk/app-debug.apk
+```powershell
+Set-Location .\backend
+.\gradlew.bat bootRun
 ```
 
-Si Gradle signale que le SDK Android 34 manque, ouvrir **Tools → SDK
-Manager → SDK Platforms**, installer **Android 14 / API 34** si
-nécessaire, puis relancer la compilation. Si Gradle ne peut pas
-télécharger un plugin, vérifier d'abord la connexion Internet, les
-dépôts Gradle et le message d'erreur complet avant de changer les
-versions.
+La méthode recommandée reste `backend/run-local.ps1`, qui charge les variables Neon de `.env.local` automatiquement.
 
-## 5. Dépannage rapide
+## Dépannage
 
-  ------------------------------------------------------------------------
-Problème                            Vérifications
-  ----------------------------------- ------------------------------------
-`google-services.json` introuvable  Vérifier
-`android/app/google-services.json`
-et l'identifiant Android.
+| Symptôme | Vérifications |
+| --- | --- |
+| L’inscription ou la connexion expire | Vérifier que le backend tourne sur le port 8080, que Neon est joignable et que le téléphone utilise `run-android-phone.ps1`. |
+| `Connection problem` sur émulateur | Démarrer d’abord le backend ; vérifier que l’émulateur utilise la configuration par défaut `10.0.2.2`. |
+| `Connection problem` sur téléphone USB | Vérifier ADB et le débogage USB, puis lancer `run-android-phone.ps1` depuis la racine. |
+| E-mail ou mot de passe refusé | Vérifier l’adresse et le mot de passe du compte Neon. Un ancien compte Firebase n’est pas automatiquement disponible dans le nouveau backend. |
+| Erreur Flyway ou connexion à la base | Vérifier la branche Neon liée et la présence locale de `.env.local` sans révéler ses secrets. |
+| Espace disque insuffisant pendant Flutter | `run-android-phone.ps1` place les fichiers temporaires Flutter et Gradle dans `.dart_tool/codex-temp` sur le disque du projet. Vérifier l’espace libre sur ce disque. |
+| Réinitialisation du mot de passe non envoyée | Configurer les variables SMTP du backend et vérifier `PUBLIC_API_URL`. |
 
-`DefaultFirebaseOptions`            Vérifier `lib/firebase_options.dart`
-introuvable                         et exécuter `flutterfire configure`
-avec le projet partagé.
+## Références
 
-`PERMISSION_DENIED` dans Firestore  Vérifier les règles publiées, l'UID
-du document, les champs et le type
-de `createdAt`.
-
-E-mail ou mot de passe incorrect    Vérifier l'adresse exacte, le mot de
-passe et le compte dans
-Authentication.
-
-Plugin Gradle introuvable           Vérifier Internet, les dépôts Gradle
-et la version déclarée; conserver
-l'erreur complète.
-
-Téléphone non détecté               Vérifier le câble USB, le débogage
-USB et `flutter devices`.
-
-Dépendances Flutter non résolues    Exécuter `flutter pub get` et
-examiner le message d'erreur.
-  ------------------------------------------------------------------------
+- [Documentation Flutter](https://docs.flutter.dev/)
+- [Neon CLI et liaison des projets](https://neon.com/blog/branch-first-dev-loop)
+- [Guide du backend](backend/README.md)

@@ -6,10 +6,7 @@ import 'sign_in_page.dart';
 import 'sign_up_page.dart';
 
 class WelcomePage extends StatelessWidget {
-  const WelcomePage({super.key, this.firebaseReady = true, this.firebaseError});
-
-  final bool firebaseReady;
-  final String? firebaseError;
+  const WelcomePage({super.key});
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -150,21 +147,6 @@ class WelcomePage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  if (!firebaseReady) ...[
-                    Container(
-                      width: double.infinity,
-                      margin: const EdgeInsets.only(bottom: 14),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFF7E6),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Text(
-                        'Firebase setup is needed before you can create an account or sign in.',
-                        style: TextStyle(color: Color(0xFF795500)),
-                      ),
-                    ),
-                  ],
                   PrimaryButton(
                     label: 'Get Started',
                     onPressed: () =>

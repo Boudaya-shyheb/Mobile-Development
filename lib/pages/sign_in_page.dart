@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
-import '../services/firebase_service.dart';
+import '../services/auth_service.dart';
 import '../widgets/form_field.dart';
 import '../widgets/primary_button.dart';
+import 'home_page.dart';
 import 'sign_up_page.dart';
+import 'welcome_page.dart';
 
 class SignInPage extends StatefulWidget {
   const SignInPage({super.key});
@@ -17,7 +19,7 @@ class _SignInPageState extends State<SignInPage> {
   final _formKey = GlobalKey<FormState>();
   final _email = TextEditingController();
   final _password = TextEditingController();
-  final _service = FirebaseService();
+  final _service = AuthService.instance;
   bool _loading = false;
 
   @override
@@ -40,9 +42,15 @@ class _SignInPageState extends State<SignInPage> {
     setState(() => _loading = true);
     try {
       await _service.signIn(email: _email.text, password: _password.text);
-      if (mounted) {
-        Navigator.of(context).popUntil((route) => route.isFirst);
-      }
+      final user = _service.currentUser.value;
+      if (!mounted || user == null) return;
+
+      // Replace the sign-in route explicitly so the authenticated screen is
+      // visible immediately instead of relying on the previous route to rebuild.
+      await Navigator.of(context).pushAndRemoveUntil<void>(
+        MaterialPageRoute<void>(builder: (_) => HomePage(user: user)),
+        (_) => false,
+      );
     } catch (error) {
       if (mounted) _showMessage(authErrorMessage(error));
     } finally {
@@ -77,7 +85,10 @@ class _SignInPageState extends State<SignInPage> {
     appBar: AppBar(
       leading: IconButton(
         icon: const Icon(Icons.arrow_back),
-        onPressed: () => Navigator.maybePop(context),
+        onPressed: () => Navigator.of(context).pushAndRemoveUntil<void>(
+          MaterialPageRoute<void>(builder: (_) => const WelcomePage()),
+          (_) => false,
+        ),
       ),
     ),
     body: SafeArea(
